@@ -7,10 +7,11 @@ from typing import Dict, Optional
 
 import gymnasium as gym
 import numpy as np
+from gymnasium import spaces
+
 from chiplet_gym.models.ppac_calculator import PPACCalculator
 from chiplet_gym.rewards.ppac_reward import PPACReward
 from chiplet_gym.utils.config import DEFAULT_CONFIG
-from gymnasium import spaces
 
 
 class ChipletEnv(gym.Env):
@@ -88,53 +89,114 @@ class ChipletEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):
-        """
-        Execute one environment step
-
-        Returns:
-            observation, reward, terminated, truncated, info
-        """
         self.current_step += 1
-
-        # Decode action into design parameters
         design_params = self._decode_action(action)
 
-        # Validate constraints
-        if not self._is_valid_design(design_params):
-            # Penalize invalid designs
-            reward = -1000.0
-            terminated = True
-            info = {"valid": False, "reason": "constraint_violation"}
-        else:
-            # Calculate PPAC metrics
+        # Always compute PPAC (even for invalid designs)
+        try:
             ppac = self.ppac_calc.compute(design_params)
-
-            # Compute reward
-            reward = self.reward_fn.compute(ppac)
-
-            # Update state
-            self.state.update(ppac)
-
-            # Check termination
-            terminated = self.current_step >= self.config["max_steps"]
-
-            # Tracking
-            if reward > self.best_reward:
-                self.best_reward = reward
-
-            info = {
-                "valid": True,
-                "throughput": ppac["throughput"],
-                "energy": ppac["energy"],
-                "cost": ppac["total_cost"],
-                "ppac": ppac,
-                "design_params": design_params,
+            valid = True
+        except Exception:
+            # If PPAC computation fails, create dummy metrics
+            ppac = {
+                "throughput": 0.0,
+                "energy": 1e-3,
+                "total_cost": 10000.0,
+                "area": design_params["num_chiplets"] * 20,
             }
+            valid = False
 
+        # Shaped reward (not binary valid/invalid)
+        if valid and self._is_valid_design(design_params):
+            # Normal PPAC reward
+            reward = self.reward_fn.compute(ppac)
+        else:
+            # Partial credit based on how "close" to valid
+            # Guide agent towards smaller chiplet counts and valid placements
+            penalty = 0
+            if design_params["num_chiplets"] > 64:
+                penalty += (design_params["num_chiplets"] - 64) * 0.1
+            if design_params["num_hbm"] > len(design_params["hbm_locations"]):
+                penalty += 5
+
+            reward = -penalty - 1  # Small negative, not -1000
+
+        terminated = self.current_step >= self.config["max_steps"]
         truncated = False
-        observation = self._get_obs()
 
+        # Update state
+        # self.state["throughput"] = ppac.get("throughput", 0)
+        # self.state["energy"] = ppac.get("energy", 1e-3)
+        # self.state["cost"] = ppac.get("total_cost", 10000)
+
+        # Update state with bounded values
+        self.state["area_per_chiplet"] = ppac["chiplet_area"]
+        self.state["latency_ai2ai"] = ppac["latency_ai2ai"]
+        self.state["latency_hbm2ai"] = ppac["latency_hbm2ai"]
+        self.state["energy"] = min(ppac["energy"], 1e-4)  # Clip
+        self.state["cost"] = min(ppac["total_cost"], 10000)  # Clip
+        self.state["throughput"] = min(ppac["throughput"], 500)  # Clip
+
+        info = {
+            "valid": valid,
+            "throughput": ppac.get("throughput", 0),
+            "energy": ppac.get("energy", 1e-3),
+            "cost": ppac.get("total_cost", 10000),
+            "ppac": ppac,
+            "design_params": design_params,
+        }
+
+        observation = self._get_obs()
         return observation, reward, terminated, truncated, info
+
+    # def step(self, action):
+    #     """
+    #     Execute one environment step
+
+    #     Returns:
+    #         observation, reward, terminated, truncated, info
+    #     """
+    #     self.current_step += 1
+
+    #     # Decode action into design parameters
+    #     design_params = self._decode_action(action)
+
+    #     # Validate constraints
+    #     if not self._is_valid_design(design_params):
+    #         # Penalize invalid designs
+    #         reward = -1000.0
+    #         terminated = True
+    #         info = {"valid": False, "reason": "constraint_violation"}
+    #     else:
+    #         # Calculate PPAC metrics
+    #         ppac = self.ppac_calc.compute(design_params)
+
+    #         # Compute reward
+    #         reward = self.reward_fn.compute(ppac)
+
+    #         # Update state
+    #         self.state.update(ppac)
+
+    #         # Check termination
+    #         terminated = self.current_step >= self.config["max_steps"]
+
+    #         # Tracking
+    #         if reward > self.best_reward:
+    #             self.best_reward = reward
+
+    #         info = {
+    #             "valid": True,
+    #             "throughput": ppac["throughput"],
+    #             "energy": ppac["energy"],
+    #             "cost": ppac["total_cost"],
+    #             "ppac": ppac,
+    #             "design_params": design_params,
+    #         }
+
+    #     truncated = False
+    #     observation = self._get_obs()
+
+    #     return observation, reward, terminated, truncated, info
 
     def _init_state(self) -> Dict:
         """Initialize environment state"""

@@ -7,12 +7,11 @@ import argparse
 
 import gymnasium as gym
 import torch
+from chiplet_gym.utils.config import DEFAULT_CONFIG
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
-
-from chiplet_gym.utils.config import DEFAULT_CONFIG
 
 
 def main():
@@ -30,7 +29,13 @@ def main():
     parser.add_argument(
         "--model_dir", type=str, default="./models", help="Model save directory"
     )
-    parser.add_argument('--device', type=str, default='auto', choices=['cuda', 'mps', 'cpu', 'auto'], help='Device')
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["cuda", "mps", "cpu", "auto"],
+        help="Device",
+    )
 
     args = parser.parse_args()
 
@@ -42,27 +47,26 @@ def main():
     # print(f"Using device: {args.device}")
 
     # Auto-detect best device
-    if args.device == 'auto':
+    if args.device == "auto":
         if torch.cuda.is_available():
-            args.device = 'cuda'
+            args.device = "cuda"
             print("Auto-detected: CUDA GPU")
         elif torch.backends.mps.is_available():
-            args.device = 'mps'
+            args.device = "mps"
             print("Auto-detected: Apple Silicon GPU (MPS)")
         else:
-            args.device = 'cpu'
+            args.device = "cpu"
             print("Auto-detected: CPU only")
     else:
         # Validate requested device
-        if args.device == 'cuda' and not torch.cuda.is_available():
+        if args.device == "cuda" and not torch.cuda.is_available():
             print("WARNING: CUDA requested but not available, falling back to CPU")
-            args.device = 'cpu'
-        elif args.device == 'mps' and not torch.backends.mps.is_available():
+            args.device = "cpu"
+        elif args.device == "mps" and not torch.backends.mps.is_available():
             print("WARNING: MPS requested but not available, falling back to CPU")
-            args.device = 'cpu'
+            args.device = "cpu"
 
     print(f"Using device: {args.device}")
-
 
     # Create environment
     print("Creating Chiplet-Gym environment...")
@@ -111,6 +115,9 @@ def main():
             gae_lambda=0.95,
             clip_range=0.2,
             ent_coef=0.01,
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            normalize_advantage=True,
         )
     else:
         raise NotImplementedError(f"Algorithm {args.algo} not yet implemented")
