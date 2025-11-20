@@ -1,4 +1,3 @@
-# test_ppac.py
 from chiplet_gym.models.ppac_calculator import PPACCalculator
 from chiplet_gym.rewards.ppac_reward import PPACReward
 from chiplet_gym.utils.config import DEFAULT_CONFIG

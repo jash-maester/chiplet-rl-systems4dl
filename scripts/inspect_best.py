@@ -1,4 +1,4 @@
-import chiplet_gym
+import chiplet_gym  # noqa
 import gymnasium as gym
 from stable_baselines3 import PPO
 

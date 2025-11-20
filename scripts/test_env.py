@@ -3,9 +3,9 @@ Quick test script to verify environment works
 Run this before training to catch issues early
 """
 
+import chiplet_gym  # noqa: F401
 import gymnasium as gym
 from stable_baselines3.common.env_checker import check_env
-import chiplet_gym
 
 
 def test_environment():
