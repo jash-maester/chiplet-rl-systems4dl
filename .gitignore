@@ -8,7 +8,7 @@ __pycache__/
 # Training artifacts
 logs/
 models/
-!./chiplet_gym/models/
+!chiplet_gym/models/
 *.zip
 
 # IDE
